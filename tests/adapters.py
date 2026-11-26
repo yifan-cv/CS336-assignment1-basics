@@ -9,6 +9,8 @@ import torch
 from jaxtyping import Bool, Float, Int
 from torch import Tensor
 
+from tokenizer.efficient_bpe import *
+
 
 def run_linear(
     d_in: int,
@@ -589,4 +591,15 @@ def run_train_bpe(
                 representing that <token1> was merged with <token2>.
                 Merges are ordered by order of creation.
     """
-    raise NotImplementedError
+    vocabulary, vocab_length = init_vocabulary(special_tokens)
+    num_merges = vocab_size - vocab_length
+    
+    PAT1 = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
+    pretoken, byte_merges = pre_tokenization(input_path, PAT1)
+
+    merges = efficient_merge(pretoken, byte_merges, num_merges)
+
+    vocabulary, vocab_length = update_vocabulary(merges, vocabulary, vocab_length)
+
+    return vocabulary, merges
+

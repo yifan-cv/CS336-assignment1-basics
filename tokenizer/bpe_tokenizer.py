@@ -1,5 +1,6 @@
 #实现朴素的Byte-Level BPE分词器算法
 import regex as re
+import os
 
 PAT1 = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
 PAT2 = r"\S+"
@@ -28,26 +29,28 @@ def init_vocabulary(special_tokens:list[str]) -> tuple[dict[int, bytes], int]:
     return vocabulary, vocab_length
 
 
-def pre_tokenization(input_path:str, regular:str) -> dict[tuple[bytes, ...], int]:
+def pre_tokenization(input_path:str | os.PathLike, regular:str) -> dict[tuple[bytes, ...], int]:
     """
     预分词
     参数：文本路径，正则化规则
     返回：字节级别得单词以及对应频次（预分词字典）
     """
     pretoken = {}
-
     with open(input_path, "r", encoding="utf-8") as f:
         content = f.read()
+        special_tokens_escape = [re.escape(i) for i in special_tokens]
+        contents = re.split("|".join(special_tokens_escape),content)    #"low<|endoftext|>lower" -> ['low','lower']
 
+        for split_content in contents:
         #将单词转化为字节序列并在全文中统计该序列出现次数
-        for match in re.finditer(regular, content):
-            word = match.group()    # "low"
-            if word not in special_tokens:
-                byte_sequence = tuple(bytes([i]) for i in word.encode('utf-8'))   # "low" -> b'low' -> (b'l', b'o', b'w')
-                if byte_sequence not in pretoken:
-                    pretoken[byte_sequence] = 1
-                else:
-                    pretoken[byte_sequence] += 1
+            for match in re.finditer(regular, split_content):
+                word = match.group()    # "low"
+                if word not in special_tokens:
+                    byte_sequence = tuple(bytes([i]) for i in word.encode('utf-8'))   # "low" -> b'low' -> (b'l', b'o', b'w')
+                    if byte_sequence not in pretoken:
+                        pretoken[byte_sequence] = 1
+                    else:
+                        pretoken[byte_sequence] += 1
 
     return pretoken # {(b'l', b'o', b'w'): 5}
 
@@ -101,8 +104,13 @@ def merge(pretoken:dict[tuple[bytes,...],int],
             new_pretoken[new_byte_sequence] = times
         pretoken = new_pretoken
 
+        #考虑到提前退出的情况
+        if all(len(byte_sequence) == 1 for byte_sequence in pretoken):  #all本身短路求值
+            print(f"此时总共合并了：{len(merges)}次退出")
+            return merges
 
     return merges   #[(b'l',b'o')]
+
 
 def update_vocabulary(merges:list[tuple[bytes,bytes]],
                       vocabulary:dict[int, bytes],
@@ -118,13 +126,11 @@ def update_vocabulary(merges:list[tuple[bytes,bytes]],
         vocab_length += 1
     return vocabulary, vocab_length
 
-    
-
 # a,b = init_vocabulary(special_tokens)
 # print(a)
 
 # input = r"/home/coke/cs336/assignment1-basics/tokenizer/tinyword.txt"
-# c = pre_tokenization(input, PAT2)
+# c = pre_tokenization(input, PAT1)
 # print(c)
 
 # d = merge(c,4)
